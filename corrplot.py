@@ -54,7 +54,16 @@ print(len(vars_original) == len(plot_labels))
 
 # --- 3. Calculate Correlation Matrix ---
 df_corr = df_subset[vars_original].copy()
-corr_matrix = df_corr.corr(numeric_only=True)
+corr_matrix = df_corr.corr(method = 'spearman', numeric_only=True)
+# method{‘pearson’, ‘kendall’, ‘spearman’} or callable
+# pandas: https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.corr.html
+# Why Spearman correlation?
+## Using Spearman correlation: Measures monotonic relationships (not just linear like Pearson)
+## and is less sensitive to outliers as it uses ranks. (It transformed y and x into rank (30,40,50,13,12) -> (3,4,5,2,1))
+# then use Pearson correlation computation on rank variable rather than the original variable to compute spearman correlation.
+# ## Using Spearman correlation: Better for non-linear (but monotonic) trends and doesn't assume
+## normal distribution like Pearson (when checking independence and making hypothesis tests), as it ranks data first.
+
 
 # --- 4. Apply Combined Plotting Style (Text Lower, Bubble Upper) ---
 try:
