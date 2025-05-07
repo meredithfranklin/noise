@@ -6,6 +6,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import root_mean_squared_error, r2_score
 from sklearn.model_selection import RandomizedSearchCV
 from scipy.stats import uniform, randint
+import pytz ## for converting from UTC to Mountain time
 
 # --- Existing Data Loading and Preprocessing ---
 
@@ -26,13 +27,19 @@ print(df.columns)
 df['time_utc'] = pd.to_datetime(df['time_utc'], errors='coerce')
 df.dropna(subset=['time_utc'], inplace=True)
 
+# Convert timezone from UTC to Denver
+mountain_tz = pytz.timezone("America/Denver")  ## aka. Mountain time
+df['time_mountain'] = df['time_utc'].dt.tz_convert(mountain_tz)
+print(f"Now, the time zone of the new data is {df["time_mountain"].dt.tz}")
+
+
 # Create the binary day night variable
 print("\nCreating 'day_night' variable (day means 1 = 11am to <5pm)...")
-df['day_night'] = ((df['time_utc'].dt.hour >= 11) & (df['time_utc'].dt.hour < 17)).astype(int)
+df['day_night'] = ((df['time_mountain'].dt.hour >= 11) & (df['time_mountain'].dt.hour < 17)).astype(int)
 print("Value counts for 'day_night':")
 print(df['day_night'].value_counts(normalize=True))
 
-df_subset = df[(df['time_utc'] >= '2023-07-01') & (df['time_utc'] <= '2024-05-31')].copy()
+df_subset = df[(df['time_mountain'] >= '2023-07-01') & (df['time_mountain'] <= '2024-05-31')].copy()
 
 # Print initial means (optional, won't be in report)
 print("\n--- Mean Values for Subset ---")
@@ -132,12 +139,10 @@ for response in ['nox', 'ch4', 'h2s', 'co', 'co2_ppm', 'no2', 'so2']:
     # --- Final Model Training ---
     final_model = xgb.XGBRegressor(
         objective="reg:squarederror", eval_metric="rmse", random_state=42,
-        n_jobs = -1, tree_method='hist', **best_params
+        n_jobs = -1, tree_method='hist', **best_params, early_stopping_rounds = 20
     )
     print(f"\nTraining final model for {response.upper()}...") # Keep console progress
-    final_model.fit(X_train, y_train, eval_set=[(X_valid, y_valid)], verbose=False, early_stopping_rounds=10)
-    # If the performance on the validation set (RMSE metric) doesn't improve for 10 consecutive trees (rounds),
-    # stop training early. This is t prevent overfitting.
+    final_model.fit(X_train, y_train, eval_set=[(X_valid, y_valid)], verbose=False)
     print(f"Final model training for {response.upper()} complete.") # Keep console progress
 
     # --- Evaluation ---
@@ -153,11 +158,6 @@ for response in ['nox', 'ch4', 'h2s', 'co', 'co2_ppm', 'no2', 'so2']:
     output_lines.append(f"Validation RMSE: {valid_rmse:.3f}")
     output_lines.append(f"Test R²:         {test_r2:.3f}")
     output_lines.append(f"Test RMSE:       {test_rmse:.3f}")
-
-    # Report the iteration number about early stopping if it occurred
-    if final_model.best_iteration:
-    # if early stopping occurs, then best_iteration is nonzero, then boolean True.
-        output_lines.append(f"Best Iteration (Early Stopping): {final_model.best_iteration}")
 
     # --- Variable Importance (with F score aka importance_type = weight) ---
     importance_scores = final_model.get_booster().get_score(importance_type='weight') # use F score (weight)
